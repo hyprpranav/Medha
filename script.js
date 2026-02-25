@@ -609,6 +609,13 @@ const dismissVideoOverlay = () => {
   if (videoDismissed) return; // guard: only dismiss once
   videoDismissed = true;
 
+  // Stop and kill the video completely so it never replays
+  if (introVideoEl) {
+    introVideoEl.pause();
+    introVideoEl.removeAttribute("src");
+    introVideoEl.load(); // forces browser to release the video resource
+  }
+
   if (videoOverlayEl) {
     videoOverlayEl.classList.add("fade-out");
     // Remove from layout after CSS fade (0.8 s)
@@ -647,10 +654,11 @@ const beginShow = () => {
     return;
   }
 
-  // Listen for natural end of video
+  // Listen for natural end of video — fires ONCE only
   introVideoEl.addEventListener("ended", dismissVideoOverlay, { once: true });
 
-  // Try autoplay (muted autoplay is allowed by all browsers)
+  // Reset to start and play (muted autoplay is allowed by all browsers)
+  introVideoEl.currentTime = 0;
   introVideoEl
     .play()
     .then(() => {
