@@ -90,9 +90,6 @@ const blackoutEl = document.getElementById("blackout");
 const audioToggleEl = document.getElementById("audio-toggle");
 const videoOverlayEl  = document.getElementById("video-overlay");
 const introVideoEl    = document.getElementById("intro-video");
-const videoSkipEl     = document.getElementById("video-skip");
-const videoPlayBtnEl  = document.getElementById("video-play-btn");
-const videoPlayScreen = document.getElementById("video-play-screen");
 
 const countdownSequence = [
   { value: 10, effect: "spark", sfx: "Electric spark" },
@@ -653,16 +650,15 @@ const beginShow = () => {
   // Listen for natural end of video
   introVideoEl.addEventListener("ended", dismissVideoOverlay, { once: true });
 
-  // Try autoplay
+  // Try autoplay (muted autoplay is allowed by all browsers)
   introVideoEl
     .play()
     .then(() => {
-      videoPlayScreen?.classList.add("hidden");
       initMergeAudio();
     })
     .catch(() => {
-      // Autoplay blocked → show TAP TO PLAY
-      videoPlayScreen?.classList.remove("hidden");
+      // Autoplay completely blocked — skip video, go straight to countdown
+      dismissVideoOverlay();
     });
 };
 
@@ -684,18 +680,6 @@ window.addEventListener("DOMContentLoaded", () => {
     dismissWaitingScreen();
     beginShow();
   }
-});
-
-// Fallback tap-to-play button (mobile autoplay blocked)
-videoPlayBtnEl?.addEventListener("click", () => {
-  videoPlayScreen?.classList.add("hidden");
-  introVideoEl
-    ?.play()
-    .then(() => {
-      introVideoEl.addEventListener("ended", dismissVideoOverlay, { once: true });
-      initMergeAudio();
-    })
-    .catch(() => dismissVideoOverlay());
 });
 
 // ─── Client (mirror) sync listeners ──────────────────────────────────────────
