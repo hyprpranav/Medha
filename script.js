@@ -563,11 +563,14 @@ const startCountdown = async () => {
   try { await ensureAudioOn(); } catch (_) {}
 
   // Start merge audio in sync with countdown (1 s delay for breathing room)
+  // If audio is already playing from the video phase, let it continue
   const LEAD = 1000;
   setTimeout(() => {
     if (mergeAudioEl) {
-      mergeAudioEl.currentTime = 0;
-      mergeAudioEl.play().catch(() => {});
+      if (mergeAudioEl.paused) {
+        mergeAudioEl.currentTime = 0;
+        mergeAudioEl.play().catch(() => {});
+      }
     }
   }, LEAD);
 
@@ -662,7 +665,12 @@ const beginShow = () => {
   introVideoEl
     .play()
     .then(() => {
+      // Start the merge audio in sync with the video so both play together
       initMergeAudio();
+      if (mergeAudioEl) {
+        mergeAudioEl.currentTime = 0;
+        mergeAudioEl.play().catch(() => {});
+      }
     })
     .catch(() => {
       // Autoplay completely blocked — skip video, go straight to countdown
