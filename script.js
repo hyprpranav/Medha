@@ -1,3 +1,85 @@
+// ─── Firebase cross-device launch sync ───────────────────────────────────────
+import { onLaunchSignal } from "./firebase-sync.js";
+
+// ─── Multi-screen BroadcastChannel sync ──────────────────────────────────────
+const SYNC_CHANNEL_NAME = "medha26-sync";
+const SYNC_HOST_KEY     = "medha26-host-id";
+const SYNC_HOST_TTL     = 4000; // ms – if no heartbeat in this window, host role is free
+
+class ScreenSync {
+  constructor() {
+    this.screenId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    this.isHost   = false;
+    this._listeners = {};
+    try {
+      this.channel = new BroadcastChannel(SYNC_CHANNEL_NAME);
+      this.channel.onmessage = ({ data }) => {
+        const cbs = this._listeners[data.type];
+        if (cbs) cbs.forEach((cb) => cb(data.payload ?? {}));
+      };
+      this._claimHost();
+      this._showBadge();
+    } catch (_) {
+      // BroadcastChannel unsupported – treat as solo host
+      this.isHost = true;
+    }
+    window.addEventListener("beforeunload", () => {
+      if (this.isHost) localStorage.removeItem(SYNC_HOST_KEY);
+    });
+  }
+
+  _claimHost() {
+    const raw = localStorage.getItem(SYNC_HOST_KEY);
+    const now = Date.now();
+    if (!raw || now - parseInt((raw.split("|")[1]) || 0, 10) > SYNC_HOST_TTL) {
+      this.isHost = true;
+      localStorage.setItem(SYNC_HOST_KEY, `${this.screenId}|${now}`);
+      this._heartbeatId = setInterval(
+        () => localStorage.setItem(SYNC_HOST_KEY, `${this.screenId}|${Date.now()}`),
+        1000
+      );
+    }
+  }
+
+  broadcast(type, payload = {}) {
+    if (this.isHost && this.channel) {
+      this.channel.postMessage({ type, payload });
+    }
+  }
+
+  on(type, cb) {
+    (this._listeners[type] = this._listeners[type] || []).push(cb);
+  }
+
+  _showBadge() {
+    const el = document.createElement("div");
+    el.textContent = this.isHost ? "HOST SCREEN" : "MIRROR SCREEN";
+    Object.assign(el.style, {
+      position:     "fixed",
+      top:          "12px",
+      left:         "50%",
+      transform:    "translateX(-50%)",
+      background:   this.isHost ? "#00e87a" : "#ff7a00",
+      color:        "#000",
+      fontFamily:   "'Audiowide', monospace",
+      fontSize:     "10px",
+      fontWeight:   "700",
+      letterSpacing:"2px",
+      padding:      "4px 18px",
+      borderRadius: "20px",
+      zIndex:       "99999",
+      pointerEvents:"none",
+      transition:   "opacity 1s ease",
+    });
+    document.body.appendChild(el);
+    setTimeout(() => (el.style.opacity = "0"), 4000);
+    setTimeout(() => el.remove(), 5200);
+  }
+}
+
+const sync = new ScreenSync();
+// ─────────────────────────────────────────────────────────────────────────────
+
 const countdownNumberEl = document.getElementById("countdown-number");
 const countdownStageEl = document.getElementById("countdown-stage");
 const revealStageEl = document.getElementById("reveal-stage");
@@ -50,8 +132,11 @@ const createDriveCurve = (amount = 0.6) => {
 const MOVIE_TRACK_PATH = "media/tamil-movie-bgm.mp3";
 const MOVIE_TRACK_VOLUME = 0.5;
 
-const MERGE_AUDIO_PATH = "merge/mix_22s (audio-joiner.com).mp3";
+const MERGE_AUDIO_PATH = "final audio/mix_26s (audio-joiner.com).mp3";
 let mergeAudioEl = null;
+
+const FINAL_AUDIO_PATH = "final audio/mix_26s (audio-joiner.com).mp3";
+let finalAudioEl = null;
 
 let audioCtx;
 let masterGain;
@@ -375,10 +460,28 @@ const playNoiseBurst = () => {
 
 const initMergeAudio = () => {
   if (mergeAudioEl) return;
+
   mergeAudioEl = new Audio(MERGE_AUDIO_PATH);
   mergeAudioEl.preload = "auto";
   mergeAudioEl.loop = false;
   mergeAudioEl.volume = 1.0;
+};
+
+// Stop all background / merge audio cleanly
+const stopAllAudio = () => {
+  if (mergeAudioEl) {
+    mergeAudioEl.pause();
+    mergeAudioEl.currentTime = 0;
+  }
+  if (movieTrack) {
+    movieTrack.pause();
+    movieTrack.currentTime = 0;
+  }
+  // Fade out Web Audio API soundtrack gracefully
+  if (audioCtx && masterGain) {
+    masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+    masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+  }
 };
 
 const ensureAudioOn = async () => {
@@ -456,26 +559,50 @@ const startCountdown = async () => {
   countdownStageEl.removeAttribute("aria-hidden");
   revealStageEl.setAttribute("aria-hidden", "true");
 
+  // Tell mirrors to prepare their countdown stage
+  sync.broadcast("COUNTDOWN_INIT");
+
   // Audio is optional – NEVER let it block the visual countdown
   try { await ensureAudioOn(); } catch (_) {}
 
-  // Show 10 → 9 → … → 0, one number per second
-  const LEAD = 300; // brief breathing room before first number
+  // Start merge audio in sync with countdown (1 s delay for breathing room)
+  const LEAD = 1000;
+  setTimeout(() => {
+    if (mergeAudioEl) {
+      mergeAudioEl.currentTime = 0;
+      mergeAudioEl.play().catch(() => {});
+    }
+  }, LEAD);
+
+  // Show 10 → 9 → … → 0, one number per second, starting at LEAD
   countdownSequence.forEach((item, index) => {
-    setTimeout(() => showNumber(item), LEAD + index * 1000);
+    setTimeout(() => {
+      showNumber(item);
+      sync.broadcast("COUNTDOWN_STEP", { index });
+    }, LEAD + index * 1000);
   });
 
   // After last number + fade: blackout then reveal letters
   const blackoutStart = LEAD + countdownSequence.length * 1000;
   setTimeout(() => {
     blackout(true);
+    sync.broadcast("BLACKOUT", { active: true });
   }, blackoutStart);
   setTimeout(() => {
     countdownStageEl.setAttribute("aria-hidden", "true");
     revealStageEl.setAttribute("aria-hidden", "false");
     blackout(false);
+    sync.broadcast("BLACKOUT", { active: false });
     showLetters();
+    sync.broadcast("SHOW_LETTERS");
   }, blackoutStart + 700);
+
+  // Stop ALL audio after the entire animation sequence finishes
+  // Letters: last letter at 5000 + 200 ms, subtitle at +6400, tagline at +6800
+  const animationEnd = blackoutStart + 700 + 6800 + 2000; // generous buffer
+  setTimeout(() => {
+    stopAllAudio();
+  }, animationEnd);
 };
 
 // ─── Video overlay helpers ────────────────────────────────────────────────────
@@ -491,21 +618,34 @@ const dismissVideoOverlay = () => {
     setTimeout(() => videoOverlayEl.classList.add("gone"), 800);
   }
 
-  // Start merge audio IMMEDIATELY as video ends
+  // Pre-load merge audio (actual playback starts in sync with countdown)
   initMergeAudio();
-  if (mergeAudioEl) {
-    mergeAudioEl.currentTime = 0;
-    mergeAudioEl.play().catch(() => {});
-  }
 
-  // Start countdown visuals after overlay has faded
-  setTimeout(() => startCountdown(), 850);
+  if (sync.isHost) {
+    // Tell mirror screens to also dismiss their video overlay
+    sync.broadcast("VIDEO_DISMISSED");
+    // Start countdown visuals after overlay has faded
+    setTimeout(() => startCountdown(), 850);
+  } else {
+    // Mirror screen: block any local countdown timer – steps arrive via broadcast
+    countdownStarted = true;
+  }
 };
 
-// ─── Boot sequence ────────────────────────────────────────────────────────────
-window.addEventListener("DOMContentLoaded", () => {
+// ─── Waiting screen helpers ───────────────────────────────────────────────────
+const waitingScreenEl = document.getElementById("waiting-screen");
+
+const dismissWaitingScreen = () => {
+  if (!waitingScreenEl) return;
+  waitingScreenEl.classList.add("dismissed");
+  setTimeout(() => waitingScreenEl.classList.add("gone"), 950);
+};
+
+// ─── Start the show (called once Firebase says "go") ─────────────────────────
+const beginShow = () => {
+  dismissWaitingScreen();
+
   if (!introVideoEl) {
-    // No video element – jump straight to countdown
     startCountdown();
     return;
   }
@@ -513,16 +653,37 @@ window.addEventListener("DOMContentLoaded", () => {
   // Listen for natural end of video
   introVideoEl.addEventListener("ended", dismissVideoOverlay, { once: true });
 
-  // Try autoplay (works on desktop; may be blocked on mobile)
+  // Try autoplay
   introVideoEl
     .play()
     .then(() => {
-      videoPlayScreen?.classList.add("hidden"); // hide tap-to-play overlay
+      videoPlayScreen?.classList.add("hidden");
+      initMergeAudio();
     })
     .catch(() => {
-      // Autoplay blocked → show the TAP TO PLAY button
+      // Autoplay blocked → show TAP TO PLAY
       videoPlayScreen?.classList.remove("hidden");
     });
+};
+
+// ─── Boot sequence ────────────────────────────────────────────────────────────
+let showStarted = false;
+
+window.addEventListener("DOMContentLoaded", () => {
+  // Listen for Firebase launch signal from the dashboard
+  try {
+    onLaunchSignal(() => {
+      if (showStarted) return;
+      showStarted = true;
+      beginShow();
+    });
+  } catch (err) {
+    // Firebase not configured — fall back to starting immediately
+    console.warn("Firebase not available, starting show directly:", err);
+    showStarted = true;
+    dismissWaitingScreen();
+    beginShow();
+  }
 });
 
 // Fallback tap-to-play button (mobile autoplay blocked)
@@ -532,16 +693,39 @@ videoPlayBtnEl?.addEventListener("click", () => {
     ?.play()
     .then(() => {
       introVideoEl.addEventListener("ended", dismissVideoOverlay, { once: true });
+      initMergeAudio();
     })
     .catch(() => dismissVideoOverlay());
 });
 
-// Skip button → dismiss immediately
-videoSkipEl?.addEventListener("click", () => {
-  introVideoEl?.pause();
-  dismissVideoOverlay();
+// ─── Client (mirror) sync listeners ──────────────────────────────────────────
+// These only fire on non-host screens; host receives no messages from itself.
+
+sync.on("VIDEO_DISMISSED", () => {
+  if (!sync.isHost) dismissVideoOverlay();
 });
 
-audioToggleEl?.addEventListener("click", async () => {
-  await handleAudioToggle();
+sync.on("COUNTDOWN_INIT", () => {
+  if (!sync.isHost) {
+    countdownStageEl.classList.add("counting");
+    countdownStageEl.removeAttribute("aria-hidden");
+    revealStageEl.setAttribute("aria-hidden", "true");
+    ensureAudioOn().catch(() => {});
+  }
+});
+
+sync.on("COUNTDOWN_STEP", ({ index }) => {
+  if (!sync.isHost) showNumber(countdownSequence[index]);
+});
+
+sync.on("BLACKOUT", ({ active }) => {
+  if (!sync.isHost) blackout(active);
+});
+
+sync.on("SHOW_LETTERS", () => {
+  if (!sync.isHost) {
+    countdownStageEl.setAttribute("aria-hidden", "true");
+    revealStageEl.setAttribute("aria-hidden", "false");
+    showLetters();
+  }
 });

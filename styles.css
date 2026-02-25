@@ -137,7 +137,6 @@ body {
 }
 
 .countdown-stage:not(.counting) .countdown-number,
-.countdown-stage:not(.counting) .countdown-ring,
 .countdown-stage:not(.counting) .countdown-hint {
   opacity: 0;
   transform: scale(0.9);
@@ -155,32 +154,6 @@ body {
 
 .countdown-number.hidden {
   opacity: 0;
-}
-
-.countdown-ring {
-  position: absolute;
-  width: clamp(240px, 40vw, 460px);
-  height: clamp(240px, 40vw, 460px);
-  border-radius: 50%;
-  border: 2px solid rgba(59, 242, 255, 0.3);
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0 30px rgba(59, 242, 255, 0.2);
-  animation: ringPulse 3s ease-in-out infinite;
-  pointer-events: none;
-}
-
-@keyframes ringPulse {
-  0%,
-  100% {
-    transform: translate(-50%, -50%) scale(0.95);
-    opacity: 0.3;
-  }
-  50% {
-    transform: translate(-50%, -50%) scale(1.05);
-    opacity: 0.8;
-  }
 }
 
 .countdown-hint {
@@ -552,6 +525,7 @@ body.dimming .bg-gradient {
   background-size: 200%;
   animation: shineSweep 1s ease;
   -webkit-background-clip: text;
+  background-clip: text;
   color: transparent;
 }
 
@@ -802,4 +776,71 @@ body.dimming .bg-gradient {
     left: 1rem;
     text-align: center;
   }
+}
+
+/* ── Waiting screen (black + college logo, shown until dashboard launch) ── */
+.waiting-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 60; /* above video overlay (50) */
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  transition: opacity 0.9s ease;
+}
+
+.waiting-screen.dismissed {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.waiting-screen.gone {
+  display: none;
+}
+
+.waiting-logo {
+  width: clamp(120px, 30vw, 220px);
+  height: clamp(120px, 30vw, 220px);
+  object-fit: contain;
+  border-radius: 50%;
+  border: 2px solid rgba(59, 242, 255, 0.3);
+  box-shadow: 0 0 40px rgba(59, 242, 255, 0.15);
+  animation: logoBreath 3s ease-in-out infinite;
+}
+
+@keyframes logoBreath {
+  0%, 100% { box-shadow: 0 0 25px rgba(59, 242, 255, 0.12); transform: scale(1); }
+  50%      { box-shadow: 0 0 50px rgba(59, 242, 255, 0.35); transform: scale(1.03); }
+}
+
+.waiting-text {
+  margin: 0;
+  font-family: "Audiowide", sans-serif;
+  font-size: clamp(0.8rem, 2.5vw, 1.1rem);
+  letter-spacing: 0.5em;
+  text-transform: uppercase;
+  color: rgba(222, 247, 255, 0.45);
+  animation: waitFade 2s ease-in-out infinite;
+}
+
+@keyframes waitFade {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+
+.waiting-pulse-ring {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  border: 2px solid rgba(59, 242, 255, 0.25);
+  position: absolute;
+  animation: waitRing 2.5s ease-out infinite;
+}
+
+@keyframes waitRing {
+  0%   { transform: scale(0.6); opacity: 0.8; }
+  100% { transform: scale(2.2); opacity: 0; }
 }

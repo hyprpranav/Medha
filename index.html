@@ -13,6 +13,17 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <!-- Waiting screen – shown until dashboard triggers the launch -->
+    <div class="waiting-screen" id="waiting-screen">
+      <img
+        src="uploads/photos/MKCE.webp"
+        alt="MKCE College Logo"
+        class="waiting-logo"
+      />
+      <p class="waiting-text">Waiting for launch&hellip;</p>
+      <div class="waiting-pulse-ring"></div>
+    </div>
+
     <div class="bg-gradient" aria-hidden="true"></div>
     <div class="grid-overlay" aria-hidden="true"></div>
     <div class="vignette" aria-hidden="true"></div>
@@ -29,7 +40,7 @@
       <video
         class="intro-video"
         id="intro-video"
-        src="uploads/videos/mkce video .mp4"
+        src="uploads/videos/updated video.mp4"
         playsinline
         preload="auto"
       ></video>
@@ -41,13 +52,11 @@
         </button>
         <p class="video-title">MEDHA&rsquo;26</p>
       </div>
-      <button class="video-skip" id="video-skip" type="button">Skip &#8250;</button>
     </div>
 
     <main class="stage" aria-live="polite">
       <section class="countdown-stage" id="countdown-stage">
         <div class="countdown-number" id="countdown-number">10</div>
-        <div class="countdown-ring" aria-hidden="true"></div>
         <p class="countdown-hint"></p>
       </section>
 
@@ -66,10 +75,6 @@
         <p class="tagline" id="tagline">BEGINS</p>
       </section>
     </main>
-
-    <button class="audio-toggle" id="audio-toggle" type="button" aria-pressed="false">
-      Enable Sound
-    </button>
 
     <div class="blackout" id="blackout" aria-hidden="true"></div>
 
